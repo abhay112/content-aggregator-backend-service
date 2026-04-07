@@ -1,0 +1,39 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Source {
+  id            String    @id @default(uuid())
+  name          String
+  slug          String    @unique
+  apiUrl        String
+  active        Boolean   @default(true)
+  lastFetchedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([slug])
+}
+
+model Article {
+  id           String   @id @default(uuid())
+  title        String
+  url          String   @unique
+  author       String?
+  source       String
+  summary      String?
+  tags         String?  // Stored as comma-separated string for simplicity in SQLite compatibility, but we are using Postgres so we could use String[]
+  publishedAt  DateTime
+  fetchedAt    DateTime @default(now())
+  isBookmarked Boolean  @default(false)
+  keywords     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
