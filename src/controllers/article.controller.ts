@@ -4,15 +4,17 @@ import { sendSuccess, sendError } from '../utils/response';
 import * as ArticleService from '../services/article.service';
 
 export const getArticles = catchAsync(async (req: Request, res: Response) => {
-    const { page = 1, limit = 10, source, q, saved } = req.query;
+    const { page = 1, limit = 12, source, q, saved, sortBy } = req.query;
 
     const { articles, total } = await ArticleService.getArticles(
         Number(page),
         Number(limit),
         source as string,
         q as string,
-        saved === 'true' ? true : undefined
+        saved as any,
+        sortBy as string
     );
+
 
     sendSuccess(res, articles, {
         page: Number(page),
@@ -46,7 +48,13 @@ export const toggleBookmark = catchAsync(async (req: Request, res: Response) => 
     sendSuccess(res, article, { message: `Article ${status} successfully` });
 });
 
+export const clearAllBookmarks = catchAsync(async (req: Request, res: Response) => {
+    await ArticleService.clearAllBookmarks();
+    sendSuccess(res, null, { message: 'All bookmarks cleared successfully' });
+});
+
 export const refreshArticles = catchAsync(async (req: Request, res: Response) => {
+
     await ArticleService.triggerRefresh();
     sendSuccess(res, { message: 'Articles refreshed successfully' });
 });

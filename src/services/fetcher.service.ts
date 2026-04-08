@@ -7,7 +7,7 @@ interface NormalizedArticle {
     author: string;
     source: string;
     summary?: string;
-    tags?: string;
+    tags?: string[];
     publishedAt: Date;
     fetchedAt: Date;
 }
@@ -19,10 +19,15 @@ const saveArticles = async (articles: NormalizedArticle[]): Promise<void> => {
                 where: { url: article.url },
                 update: {
                     fetchedAt: article.fetchedAt,
-                    summary: article.summary,
-                    tags: article.tags,
+                    summary: article.summary ?? null,
+                    tags: { set: article.tags || [] },
                 },
-                create: article,
+                create: {
+                    ...article,
+                    tags: article.tags || [],
+                    summary: article.summary ?? null,
+                },
+
             });
         } catch (err) {
             console.warn(`[saveArticles] skipped article "${article.title}":`, (err as Error).message);
@@ -49,9 +54,10 @@ const fetchHackerNewsLogic = async (apiUrl: string): Promise<NormalizedArticle[]
                     source: 'hacker-news',
                     publishedAt: new Date(story.time * 1000),
                     fetchedAt,
+                    tags: story.type ? [story.type] : []
                 });
             }
-        } catch (e) { /* skip individual failure */ }
+        } catch (e) { /* skip */ }
     }
     return articles;
 };
@@ -65,7 +71,7 @@ const fetchDevToLogic = async (apiUrl: string): Promise<NormalizedArticle[]> => 
         author: a.user?.name || a.user?.username || 'Unknown',
         source: 'devto',
         summary: a.description || '',
-        tags: (a.tag_list || []).join(','),
+        tags: a.tag_list || [],
         publishedAt: a.published_at ? new Date(a.published_at) : fetchedAt,
         fetchedAt,
     }));
@@ -86,6 +92,7 @@ const fetchRedditLogic = async (apiUrl: string): Promise<NormalizedArticle[]> =>
         author: p.author || 'Unknown',
         source: 'reddit-programming',
         summary: p.selftext || '',
+        tags: ['programming'],
         publishedAt: new Date(p.created_utc * 1000),
         fetchedAt,
     }));
@@ -100,7 +107,7 @@ const fetchLobstersLogic = async (apiUrl: string): Promise<NormalizedArticle[]> 
         author: s.submitter_user?.username || 'Unknown',
         source: 'lobsters',
         summary: s.description || '',
-        tags: (s.tags || []).join(','),
+        tags: s.tags || [],
         publishedAt: s.created_at ? new Date(s.created_at) : fetchedAt,
         fetchedAt,
     }));

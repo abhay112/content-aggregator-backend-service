@@ -9,6 +9,8 @@ datasource db {
   provider = "postgresql"
 }
 
+
+
 model Source {
   id            String    @id @default(uuid())
   name          String
@@ -29,8 +31,9 @@ model Article {
   author       String?
   source       String
   summary      String?
-  tags         String?  // Stored as comma-separated string for simplicity in SQLite compatibility, but we are using Postgres so we could use String[]
+  tags         String[]
   publishedAt  DateTime
+
   fetchedAt    DateTime @default(now())
   isBookmarked Boolean  @default(false)
   keywords     String?

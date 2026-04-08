@@ -11,6 +11,8 @@ const router = Router();
 router.get('/articles', validate(articleQuerySchema, 'query'), ArticleController.getArticles);
 router.get('/articles/:id', ArticleController.getArticleById);
 router.post('/articles/:id/bookmark', ArticleController.toggleBookmark);
+router.delete('/articles/bookmarks', ArticleController.clearAllBookmarks);
+
 
 
 // Source routes

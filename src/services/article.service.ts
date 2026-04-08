@@ -1,7 +1,7 @@
 import * as ArticleRepository from '../repositories/article.repository';
 import { runAllFetchers } from './fetcher.service';
 
-export const getArticles = async (page: number, limit: number, source?: string, q?: string, isBookmarked?: boolean) => {
+export const getArticles = async (page: number, limit: number, source?: string, q?: string, isBookmarked?: boolean, sortBy?: string) => {
     const skip = (page - 1) * limit;
 
     let whereClause: any = {};
@@ -11,8 +11,9 @@ export const getArticles = async (page: number, limit: number, source?: string, 
     }
 
     if (isBookmarked !== undefined) {
-        whereClause.isBookmarked = isBookmarked;
+        whereClause.isBookmarked = String(isBookmarked) === 'true' || isBookmarked === true;
     }
+
 
     if (q) {
         whereClause = {
@@ -27,7 +28,7 @@ export const getArticles = async (page: number, limit: number, source?: string, 
     }
 
     const [articles, total] = await Promise.all([
-        ArticleRepository.getArticles(skip, limit, whereClause),
+        ArticleRepository.getArticles(skip, limit, whereClause, sortBy),
         ArticleRepository.countArticles(whereClause)
     ]);
 
@@ -42,7 +43,12 @@ export const toggleBookmark = async (id: string) => {
     return ArticleRepository.toggleBookmark(id);
 };
 
+export const clearAllBookmarks = async () => {
+    return ArticleRepository.clearAllBookmarks();
+};
+
 export const triggerRefresh = async () => {
+
     await runAllFetchers();
     return true;
 };

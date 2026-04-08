@@ -1,9 +1,11 @@
 import prisma from '../prisma';
 
-export const getArticles = async (skip: number, limit: number, whereClause: any) => {
+export const getArticles = async (skip: number, limit: number, whereClause: any, sortBy: string = 'newest') => {
+    const order = sortBy === 'relative' ? 'asc' : 'desc';
+
     return prisma.article.findMany({
         where: whereClause,
-        orderBy: { publishedAt: 'desc' },
+        orderBy: { publishedAt: order },
         skip,
         take: limit,
     });
@@ -29,7 +31,14 @@ export const toggleBookmark = async (id: string) => {
     });
 };
 
+export const clearAllBookmarks = async () => {
+    return prisma.article.updateMany({
+        data: { isBookmarked: false }
+    });
+};
+
 export const upsertArticle = async (url: string, data: any) => {
+
     return prisma.article.upsert({
         where: { url },
         update: {

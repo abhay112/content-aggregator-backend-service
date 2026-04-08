@@ -5,8 +5,18 @@ import { sendError } from '../utils/response';
 export const validate = (schema: ZodSchema, property: 'body' | 'query' | 'params') =>
     async (req: Request, res: Response, next: NextFunction) => {
         try {
-            await schema.parseAsync(req[property]);
+            const validated = await schema.parseAsync(req[property]);
+            if (property === 'query' || property === 'params') {
+                for (const key in req[property]) {
+                    delete req[property][key];
+                }
+                Object.assign(req[property], validated);
+            } else {
+                req[property] = validated;
+            }
             next();
+
+
         } catch (error: any) {
             if (error instanceof ZodError || error.name === 'ZodError') {
                 const errors = error.errors?.map((err: any) => ({
