@@ -16,7 +16,7 @@ const saveArticles = async (articles: NormalizedArticle[]): Promise<void> => {
     for (const article of articles) {
         try {
             await prisma.article.upsert({
-                where: { url: article.url },
+                where: { url_source: { url: article.url, source: article.source } },
                 update: {
                     fetchedAt: article.fetchedAt,
                     summary: article.summary ?? null,
@@ -143,8 +143,12 @@ export const runAllFetchers = async (): Promise<void> => {
                         data: { lastFetchedAt: new Date() }
                     });
                 }
-            } catch (err) {
-                console.error(`[Fetcher] Failed to refresh source ${source.name}:`, (err as Error).message);
+            } catch (err: any) {
+                if (err.response && err.response.status === 429) {
+                    console.warn(`[Fetcher] Rate limit exceeded for source ${source.name} (429). Will retry on next cycle.`);
+                } else {
+                    console.error(`[Fetcher] Failed to refresh source ${source.name}:`, err.message || err);
+                }
             }
         }
     } catch (err) {
@@ -152,14 +156,36 @@ export const runAllFetchers = async (): Promise<void> => {
     }
 };
 
+const cleanupOldArticles = async (): Promise<void> => {
+    try {
+        const twoWeeksAgo = new Date();
+        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+
+        const { count } = await prisma.article.deleteMany({
+            where: {
+                fetchedAt: {
+                    lt: twoWeeksAgo,
+                },
+                isBookmarked: false,
+            },
+        });
+        if (count > 0) {
+            console.log(`[Cleanup] Deleted ${count} old unbookmarked articles.`);
+        }
+    } catch (err) {
+        console.error('[Cleanup] Failed to clean up old articles:', (err as Error).message);
+    }
+};
+
 export const startCronJobs = (): void => {
     const cron = require('node-cron');
-    console.log('[Cron] Scheduling dynamic content aggregation every 15 minutes...');
+    console.log('[Cron] Scheduling dynamic content aggregation every 4 hours...');
 
-    cron.schedule('*/15 * * * *', async () => {
+    cron.schedule('0 */4 * * *', async () => {
         console.log('[Cron] Running scheduled dynamic content aggregation...');
+        await cleanupOldArticles();
         await runAllFetchers();
     });
 
-    runAllFetchers().catch(console.error);
+    cleanupOldArticles().then(() => runAllFetchers()).catch(console.error);
 };

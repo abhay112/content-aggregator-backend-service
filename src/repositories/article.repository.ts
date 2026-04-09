@@ -40,7 +40,7 @@ export const clearAllBookmarks = async () => {
 export const upsertArticle = async (url: string, data: any) => {
 
     return prisma.article.upsert({
-        where: { url },
+        where: { url_source: { url, source: data.source } },
         update: {
             fetchedAt: data.fetchedAt || new Date(),
         },

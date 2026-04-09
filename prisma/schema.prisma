@@ -27,7 +27,7 @@ model Source {
 model Article {
   id           String   @id @default(uuid())
   title        String
-  url          String   @unique
+  url          String
   author       String?
   source       String
   summary      String?
@@ -39,4 +39,6 @@ model Article {
   keywords     String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@unique([url, source])
 }

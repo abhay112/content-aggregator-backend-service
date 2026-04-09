@@ -34,7 +34,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     sendError(res, err.message || 'Internal Server Error', 'INTERNAL_SERVER_ERROR', err.status || 500);
 });
 
-app.listen(PORT, () => {
+app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`Server is running on port ${PORT}`);
     startCronJobs();
 });

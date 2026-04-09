@@ -52,11 +52,17 @@ fi
 # 1. System Updates & Prerequisites
 # ==========================================
 log "Updating system packages..."
-apt-get update -y
-apt-get upgrade -y
+export DEBIAN_FRONTEND=noninteractive
+
+# Wipe broken/stale mirror caches to prevent 404 Not Found errors
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+
+apt-get update -y || true
+apt-get upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" || true
 
 log "Installing basic dependencies (curl, git, ufw, build-essential)..."
-apt-get install -y curl git ufw build-essential
+apt-get install -y curl git ufw build-essential || true
 
 # ==========================================
 # 2. Install Node.js (Current LTS - v20)
@@ -64,7 +70,7 @@ apt-get install -y curl git ufw build-essential
 if ! command -v node &> /dev/null; then
     log "Node.js not found. Installing Node.js v20..."
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    apt-get install -y nodejs
+    apt-get install -y --fix-missing nodejs
 else
     log "Node.js is already installed: $(node -v)"
 fi
@@ -74,7 +80,7 @@ fi
 # ==========================================
 if ! command -v psql &> /dev/null; then
     log "PostgreSQL not found. Installing PostgreSQL..."
-    apt-get install -y postgresql postgresql-contrib
+    apt-get install -y --fix-missing postgresql postgresql-contrib
 else
     log "PostgreSQL is already installed."
 fi
@@ -97,22 +103,35 @@ log "Setting up Application..."
 log "Generating .env file..."
 cat > .env <<EOF
 NODE_ENV=production
-PORT=${APP_PORT}
+PORT=$APP_PORT
+METRICS_PORT=6002
+# Database connection string
 DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5432/${DB_NAME}?schema=public"
+# Frontend URL for CORS
 CORS_ORIGIN="*"
+# Logging configuration
+LOG_LEVEL=info
+# API External URLs
+HN_ITEM_BASE_URL=https://hacker-news.firebaseio.com/v0/item
+REDDIT_BASE_URL=https://reddit.com
 EOF
 
 # ==========================================
 # 5. Application Dependencies & Building
 # ==========================================
 log "Installing NPM dependencies..."
-npm install --omit=dev || npm install
+npm install
 
 log "Generating Prisma Client..."
 npx prisma generate
 
-log "Running Database Migrations..."
-npx prisma migrate deploy
+log "Running Database Migrations & Schema Sync..."
+# Attempt formal migrations first. If the migrations folder doesn't exist, it will skip gracefully.
+npx prisma migrate deploy || true
+
+# Force-push the schema to ensure all tables literally exist in case migrations aren't checked into git.
+# The --accept-data-loss flag ensures it forces the schema update no matter what.
+npx prisma db push --accept-data-loss
 
 log "Executing Data Seed (Sources & Setup)..."
 if npm run seed; then
@@ -125,6 +144,9 @@ fi
 if [ -f "tsconfig.json" ] || grep -q 'typescript' package.json; then
     log "Compiling TypeScript... (if applicable)"
     npm run build || log "\e[33mWarning: Build failed. If not using TypeScript or handled differently, disregard.\e[0m"
+    
+    log "Resolving TypeScript Aliases..."
+    npx tsc-alias || true
 fi
 
 # ==========================================
@@ -155,10 +177,7 @@ fi
 
 log "Saving PM2 process list to auto-start on reboot..."
 pm2 save
-pm2 startup systemd -u root --hp /root | tail -n 1 > pm2-startup.sh
-chmod +x pm2-startup.sh
-./pm2-startup.sh || true
-rm pm2-startup.sh
+env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u root --hp /root || true
 
 # ==========================================
 # 7. Firewall (UFW) Configuration
@@ -178,4 +197,10 @@ log "IMPORTANT: To connect your Vercel frontend to this backend using the IP,"
 log "make sure CORS allows your Vercel URL. Note that browsers may block HTTP"
 log "backends from HTTPS frontends (Mixed Content restriction)."
 log "See the README for solutions to this issue."
+log "---------------------------------------------------------------------"
+log "TESTING YOUR NEW API:"
+log "1. Run: curl -I http://${PUBLIC_IP}:${APP_PORT}/health"
+log "2. See live logs: pm2 logs content-aggregator"
+log "NOTE: If you see '429 Too Many Requests' in your logs from Lobste.rs"
+log "or Reddit, it is entirely normal! It's just a temporary rate-limit."
 log "====================================================================="
