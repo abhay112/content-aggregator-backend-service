@@ -7,6 +7,7 @@ import { startCronJobs } from './services/fetcher.service';
 import { sendError } from './utils/response';
 import { setupMetrics, httpRequestDurationMicroseconds, httpRequestsTotal } from './utils/metrics';
 import logger from './utils/logger';
+import { setupSwagger } from './utils/swagger';
 
 dotenv.config();
 
@@ -17,6 +18,9 @@ const PORT = process.env.PORT || 6001;
 app.use(cors());
 app.use(express.json());
 app.use(pinoHttp({ logger }));
+
+// Swagger Documentation
+setupSwagger(app);
 
 // Metrics middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -43,7 +47,22 @@ setupMetrics(app);
 // Routes
 app.use('/api/v1', articleRoutes);
 
-// Health check
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: Base health check
+ *     responses:
+ *       200:
+ *         description: Server is running
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string }
+ *                 message: { type: string }
+ */
 app.get('/health', (req: Request, res: Response) => {
     res.json({ status: 'OK', message: 'Content Aggregator Simple API is running' });
 });
