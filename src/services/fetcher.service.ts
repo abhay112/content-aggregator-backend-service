@@ -1,7 +1,9 @@
 import axios from 'axios';
 import prisma from '../prisma';
+import logger from '../utils/logger';
+import { cronJobLastRunTimestamp, cronJobRunsTotal, articlesFetchedTotal } from '../utils/metrics';
 
-interface NormalizedArticle {
+export interface NormalizedArticle {
     title: string;
     url: string;
     author: string;
@@ -30,12 +32,12 @@ const saveArticles = async (articles: NormalizedArticle[]): Promise<void> => {
 
             });
         } catch (err) {
-            console.warn(`[saveArticles] skipped article "${article.title}":`, (err as Error).message);
+            logger.warn({ err, articleTitle: article.title }, '[saveArticles] skipped article');
         }
     }
 };
 
-const fetchHackerNewsLogic = async (apiUrl: string): Promise<NormalizedArticle[]> => {
+export const fetchHackerNewsLogic = async (apiUrl: string): Promise<NormalizedArticle[]> => {
     const { data: storyIds } = await axios.get<number[]>(apiUrl, { timeout: 10_000 });
     if (!storyIds?.length) return [];
 
@@ -62,7 +64,7 @@ const fetchHackerNewsLogic = async (apiUrl: string): Promise<NormalizedArticle[]
     return articles;
 };
 
-const fetchDevToLogic = async (apiUrl: string): Promise<NormalizedArticle[]> => {
+export const fetchDevToLogic = async (apiUrl: string): Promise<NormalizedArticle[]> => {
     const { data } = await axios.get<any[]>(apiUrl, { timeout: 10_000 });
     const fetchedAt = new Date();
     return (data || []).filter(a => a.url && a.title).map(a => ({
@@ -77,7 +79,7 @@ const fetchDevToLogic = async (apiUrl: string): Promise<NormalizedArticle[]> => 
     }));
 };
 
-const fetchRedditLogic = async (apiUrl: string): Promise<NormalizedArticle[]> => {
+export const fetchRedditLogic = async (apiUrl: string): Promise<NormalizedArticle[]> => {
     const { data } = await axios.get(apiUrl, {
         timeout: 10_000,
         headers: { 'User-Agent': 'content-aggregator-bot/1.0' }
@@ -98,7 +100,7 @@ const fetchRedditLogic = async (apiUrl: string): Promise<NormalizedArticle[]> =>
     }));
 };
 
-const fetchLobstersLogic = async (apiUrl: string): Promise<NormalizedArticle[]> => {
+export const fetchLobstersLogic = async (apiUrl: string): Promise<NormalizedArticle[]> => {
     const { data } = await axios.get<any[]>(apiUrl, { timeout: 10_000 });
     const fetchedAt = new Date();
     return (data || []).slice(0, 10).filter(s => s.title).map(s => ({
@@ -122,37 +124,48 @@ const fetcherLogicMap: Record<string, (apiUrl: string) => Promise<NormalizedArti
 
 export const runAllFetchers = async (): Promise<void> => {
     try {
-        console.log('[Fetcher] Syncing from database sources...');
+        logger.info('[Fetcher] Syncing from database sources...');
         const sources = await prisma.source.findMany({ where: { active: true } });
 
         for (const source of sources) {
             const logic = fetcherLogicMap[source.slug];
             if (!logic) {
-                console.warn(`[Fetcher] No logic implemented for source slug: ${source.slug}`);
+                logger.warn({ sourceSlug: source.slug }, '[Fetcher] No logic implemented for source slug');
                 continue;
             }
 
             try {
-                console.log(`[Fetcher] Fetching: ${source.name} (${source.apiUrl})`);
+                logger.info({ sourceName: source.name, apiUrl: source.apiUrl }, '[Fetcher] Fetching');
                 const articles = await logic(source.apiUrl);
                 if (articles.length > 0) {
                     await saveArticles(articles);
-                    console.log(`[Fetcher] Saved ${articles.length} articles from ${source.name}`);
-                    await prisma.source.update({
+                    articlesFetchedTotal.labels(source.slug).inc(articles.length);
+                    logger.info({ count: articles.length, sourceName: source.name }, '[Fetcher] Saved articles');
+                     await prisma.source.update({
                         where: { id: source.id },
-                        data: { lastFetchedAt: new Date() }
+                        data: { 
+                            lastFetchedAt: new Date(),
+                            lastError: null 
+                        }
                     });
                 }
             } catch (err: any) {
+                let errorMessage = err.message || String(err);
                 if (err.response && err.response.status === 429) {
-                    console.warn(`[Fetcher] Rate limit exceeded for source ${source.name} (429). Will retry on next cycle.`);
+                    errorMessage = 'Rate Limit Exceeded (429)';
+                    logger.warn({ sourceName: source.name }, '[Fetcher] Rate limit exceeded (429). Will retry on next cycle.');
                 } else {
-                    console.error(`[Fetcher] Failed to refresh source ${source.name}:`, err.message || err);
+                    logger.error({ err, sourceName: source.name }, '[Fetcher] Failed to refresh source');
                 }
+
+                await prisma.source.update({
+                    where: { id: source.id },
+                    data: { lastError: errorMessage }
+                });
             }
         }
     } catch (err) {
-        console.error('[Fetcher] Global refresh error:', err);
+        logger.error({ err }, '[Fetcher] Global refresh error');
     }
 };
 
@@ -170,22 +183,42 @@ const cleanupOldArticles = async (): Promise<void> => {
             },
         });
         if (count > 0) {
-            console.log(`[Cleanup] Deleted ${count} old unbookmarked articles.`);
+            logger.info({ deletedCount: count }, '[Cleanup] Deleted old unbookmarked articles');
         }
     } catch (err) {
-        console.error('[Cleanup] Failed to clean up old articles:', (err as Error).message);
+        logger.error({ err }, '[Cleanup] Failed to clean up old articles');
     }
 };
 
 export const startCronJobs = (): void => {
     const cron = require('node-cron');
-    console.log('[Cron] Scheduling dynamic content aggregation every 4 hours...');
+    logger.info('[Cron] Scheduling dynamic content aggregation every 4 hours...');
 
     cron.schedule('0 */4 * * *', async () => {
-        console.log('[Cron] Running scheduled dynamic content aggregation...');
-        await cleanupOldArticles();
-        await runAllFetchers();
+        logger.info('[Cron] Running scheduled dynamic content aggregation...');
+        try {
+            await cleanupOldArticles();
+            await runAllFetchers();
+            cronJobRunsTotal.labels('success').inc();
+        } catch (err) {
+            cronJobRunsTotal.labels('failure').inc();
+            logger.error({ err }, '[Cron] Scheduled run failed');
+        } finally {
+            cronJobLastRunTimestamp.set(Math.floor(Date.now() / 1000));
+        }
     });
 
-    cleanupOldArticles().then(() => runAllFetchers()).catch(console.error);
+    // Startup run
+    (async () => {
+        try {
+            await cleanupOldArticles();
+            await runAllFetchers();
+            cronJobRunsTotal.labels('success').inc();
+        } catch (err) {
+            cronJobRunsTotal.labels('failure').inc();
+            logger.error({ err }, '[Cron] Startup sync failed');
+        } finally {
+            cronJobLastRunTimestamp.set(Math.floor(Date.now() / 1000));
+        }
+    })();
 };

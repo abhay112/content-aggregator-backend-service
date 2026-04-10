@@ -18,6 +18,7 @@ model Source {
   apiUrl        String
   active        Boolean   @default(true)
   lastFetchedAt DateTime?
+  lastError     String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

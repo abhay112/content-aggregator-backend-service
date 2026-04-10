@@ -113,4 +113,8 @@ Data from diverse sources (Hacker News' Firebase API vs. Reddit's JSON) is norma
 
 ## 📝 Assumptions
 - We assume the PostgreSQL database is locally accessible or correctly configured in the `.env`.
-- The `node-cron` job is set to 15 minutes by default to respect rate limits of public APIs while keeping content fresh.
+- The `node-cron` job is set to run every 4 hours to respect rate limits of public APIs while keeping content fresh, explicitly handling 429 errors and executing a 14-day data retention cleanup policy.
+
+## 🤖 AI Usage Policy
+*Please update this to reflect your usage:*
+I utilized an AI-powered coding assistant to help scaffold the Express boilerplate, design the layered TypeScript architecture, construct the MongoDB/PostgreSQL database schema via Prisma, and write the regex/normalization logic for data cleanup. I guided the architectural decisions, comprehensively reviewed all generated code logic, verified its behavior locally, and am fully comfortable explaining and defending the functionality of this service.
