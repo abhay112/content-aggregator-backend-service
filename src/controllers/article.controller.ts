@@ -4,13 +4,13 @@ import { sendSuccess, sendError } from '../utils/response';
 import * as ArticleService from '../services/article.service';
 
 export const getArticles = catchAsync(async (req: Request, res: Response) => {
-    const { page = 1, limit = 12, source, q, saved, sortBy } = req.query;
+    const { page = 1, limit = 12, source, q, search, saved, sortBy } = req.query;
 
     const { articles, total } = await ArticleService.getArticles(
         Number(page),
         Number(limit),
         source as string,
-        q as string,
+        (q || search) as string,
         saved as any,
         sortBy as string
     );
