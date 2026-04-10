@@ -43,7 +43,8 @@ export const fetchHackerNewsLogic = async (apiUrl: string): Promise<NormalizedAr
 
     const fetchedAt = new Date();
     const articles: NormalizedArticle[] = [];
-    const itemBaseUrl = process.env.HN_ITEM_BASE_URL || 'https://hacker-news.firebaseio.com/v0/item';
+
+    const itemBaseUrl = apiUrl.replace(/\/[^\/]+\.json$/, '/item');
 
     for (const id of storyIds.slice(0, 10)) {
         try {
@@ -86,7 +87,8 @@ export const fetchRedditLogic = async (apiUrl: string): Promise<NormalizedArticl
     });
     const posts: any[] = data?.data?.children || [];
     const fetchedAt = new Date();
-    const redditBaseUrl = process.env.REDDIT_BASE_URL || 'https://reddit.com';
+
+    const redditBaseUrl = new URL(apiUrl).origin;
 
     return posts.map(p => p.data).filter(p => p.title).map(p => ({
         title: p.title,
@@ -141,11 +143,11 @@ export const runAllFetchers = async (): Promise<void> => {
                     await saveArticles(articles);
                     articlesFetchedTotal.labels(source.slug).inc(articles.length);
                     logger.info({ count: articles.length, sourceName: source.name }, '[Fetcher] Saved articles');
-                     await prisma.source.update({
+                    await prisma.source.update({
                         where: { id: source.id },
-                        data: { 
+                        data: {
                             lastFetchedAt: new Date(),
-                            lastError: null 
+                            lastError: null
                         }
                     });
                 }

@@ -14,7 +14,7 @@ const transport = pino.transport({
       options: { destination: path.join(logDir, 'app.log'), mkdir: true },
     },
     {
-      target: 'pino-pretty', // Optional: for console readability in dev
+      target: 'pino-pretty',
       options: {
         colorize: true,
         ignore: 'pid,hostname',
