@@ -27,7 +27,7 @@
   "timezone": "",
   "title": "Content Aggregator — Full Observability",
   "uid": "jr-dev-monitor",
-  "version": 2,
+  "version": 3,
 
   "templating": {
     "list": [
@@ -56,7 +56,7 @@
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
-        "current": {},
+        "current": { "selected": true, "text": "Loki", "value": "loki-content-aggregator" },
         "options": []
       },
       {
@@ -118,7 +118,7 @@
 
     {
       "id": 3, "type": "stat",
-      "title": "Failed API Calls (5m)",
+      "title": "Failed API Calls (4xx+5xx, 5m)",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 6, "w": 6, "x": 6, "y": 1 },
       "options": {
@@ -305,23 +305,23 @@
     {
       "id": 23, "type": "logs",
       "title": "Error Logs",
-      "description": "Live error/warn log lines from the application",
-      "datasource": { "type": "loki", "uid": "${loki_datasource}" },
+      "description": "Live error/warn log lines from the application (level 40=warn, 50=error)",
+      "datasource": { "type": "loki", "uid": "loki-content-aggregator" },
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
       "options": {
         "dedupStrategy": "none",
         "enableLogDetails": true,
-        "prettifyLogMessage": false,
+        "prettifyLogMessage": true,
         "showCommonLabels": false,
-        "showLabels": false,
+        "showLabels": true,
         "showTime": true,
         "sortOrder": "Descending",
         "wrapLogMessage": true
       },
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "${loki_datasource}" },
-          "expr": "{app=\"content-aggregator\"} | json | level=~\"error|warn\" | line_format \"[{{.level}}] {{.msg}}\"",
+          "datasource": { "type": "loki", "uid": "loki-content-aggregator" },
+          "expr": "{app=\"content-aggregator\", level=~\"warn|error|fatal\"}",
           "refId": "A"
         }
       ]
@@ -432,22 +432,22 @@
       "id": 34, "type": "logs",
       "title": "Cron Job Logs",
       "description": "All cron and fetcher log lines in real-time",
-      "datasource": { "type": "loki", "uid": "${loki_datasource}" },
+      "datasource": { "type": "loki", "uid": "loki-content-aggregator" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
       "options": {
         "dedupStrategy": "none",
         "enableLogDetails": true,
-        "prettifyLogMessage": false,
+        "prettifyLogMessage": true,
         "showCommonLabels": false,
-        "showLabels": false,
+        "showLabels": true,
         "showTime": true,
         "sortOrder": "Descending",
         "wrapLogMessage": true
       },
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "${loki_datasource}" },
-          "expr": "{app=\"content-aggregator\"} | json | msg=~\".*\\\\[Cron\\\\].*|.*\\\\[Fetcher\\\\].*|.*\\\\[Cleanup\\\\].*\"",
+          "datasource": { "type": "loki", "uid": "loki-content-aggregator" },
+          "expr": "{app=\"content-aggregator\"} |= `[Cron]` or `[Fetcher]` or `[Cleanup]`",
           "refId": "A"
         }
       ]

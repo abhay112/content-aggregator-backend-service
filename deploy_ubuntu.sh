@@ -111,6 +111,8 @@ DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5432/${DB_NAME}?schem
 CORS_ORIGIN="*"
 # Logging configuration
 LOG_LEVEL=info
+# Pino log directory — Promtail watches this path
+LOG_DIR=/var/log/content-aggregator
 # API External URLs
 HN_ITEM_BASE_URL=https://hacker-news.firebaseio.com/v0/item
 REDDIT_BASE_URL=https://reddit.com
