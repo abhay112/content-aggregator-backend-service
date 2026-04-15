@@ -22,24 +22,38 @@ app.use(pinoHttp({ logger }));
 // Swagger Documentation
 setupSwagger(app);
 
+// Internal-only paths that should NOT be counted as real API traffic
+const EXCLUDED_PATHS = ['/metrics', '/health', '/favicon.ico'];
+
 // Metrics middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
     res.on('finish', () => {
+        // Skip internal infra calls
+        if (EXCLUDED_PATHS.includes(req.path)) return;
+
         const duration = (Date.now() - start) / 1000;
-        const route = req.route ? req.route.path : req.path;
         const statusCode = res.statusCode.toString();
 
-        httpRequestDurationMicroseconds
-            .labels(req.method, route, statusCode)
-            .observe(duration);
+        // Use the matched Express route PATTERN (e.g. /articles/:id) when available.
+        // For unmatched routes (bots hitting /.env, /wp-admin, IDs in paths, etc.)
+        // normalise to max 4 path segments to prevent Prometheus cardinality explosion.
+        let route: string;
+        if (req.route) {
+            route = req.route.path as string;
+        } else {
+            const cleanPath = req.path.split('?')[0];
+            const segments = cleanPath.split('/').slice(0, 5); // max 4 levels deep
+            route = segments.join('/') || '/';
+        }
 
-        httpRequestsTotal
-            .labels(req.method, route, statusCode)
-            .inc();
+        httpRequestDurationMicroseconds.labels(req.method, route, statusCode).observe(duration);
+        httpRequestsTotal.labels(req.method, route, statusCode).inc();
     });
     next();
 });
+
+
 
 // Setup Prometheus metrics endpoint
 setupMetrics(app);
